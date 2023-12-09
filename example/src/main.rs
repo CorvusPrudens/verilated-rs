@@ -12,7 +12,9 @@ pub struct Top {
     #[port(reset)]
     pub rst_i: bool,
     #[port(output)]
-    pub count_o: [bool; 4],
+    pub count_o: [bool; 128],
+    #[port(input)]
+    pub count_i: [bool; 128],
 }
 
 fn main() {

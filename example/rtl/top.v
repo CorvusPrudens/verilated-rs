@@ -3,12 +3,14 @@
 module top(
     clk_i,
     rst_i,
-    count_o
+    count_o,
+    count_i
 );
 
     input clk_i;
     input rst_i;
-    output [3:0] count_o;
+    output [127:0] count_o;
+    input  [127:0] count_i;
    
     // 4-bit counter
     counter uut(

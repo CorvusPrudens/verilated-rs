@@ -9,13 +9,13 @@ module counter(
     input clk_i;
     input rst_i;
 
-    output [3:0] count_o;
-    reg [3:0]    count_o;
+    output [127:0] count_o;
+    reg [127:0]    count_o;
    
     always @(posedge clk_i)
       begin
         if (rst_i == 1'b1) begin
-            count_o <= 4'b0000;
+            count_o <= 128'b0;
         end
         else begin
             count_o <= count_o + 1;

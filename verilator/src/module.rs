@@ -286,35 +286,77 @@ impl {rs_ty} {{"#,
         ));
 
         for input in &ports.inputs {
-            t!(writeln!(
-                rs_out,
-                r#"    pub fn set_{input}(&mut self, v: {ty}) {{
+            if input.ty != "u128" {
+                t!(writeln!(
+                    rs_out,
+                    r#"    pub fn set_{input}(&mut self, v: {ty}) {{
         unsafe {{ ffi::{c_ty}_set_{input}(self.0, v); }}
     }}
 "#,
-                c_ty = c_ty,
-                input = input.name,
-                ty = &input.ty
-            ));
+                    c_ty = c_ty,
+                    input = input.name,
+                    ty = &input.ty
+                ));
+            } else {
+                t!(writeln!(
+                    rs_out,
+                    r#"    pub fn set_{input}(&mut self, v: {ty}) {{
+        unsafe {{
+            let v = v.to_le_bytes();
+            ffi::{c_ty}_set_{input}_0(self.0, u32::from_le_bytes([v[0], v[1], v[2], v[3]]));
+            ffi::{c_ty}_set_{input}_1(self.0, u32::from_le_bytes([v[4], v[5], v[6], v[7]]));
+            ffi::{c_ty}_set_{input}_2(self.0, u32::from_le_bytes([v[8], v[9], v[10], v[11]]));
+            ffi::{c_ty}_set_{input}_3(self.0, u32::from_le_bytes([v[12], v[13], v[14], v[15]]));
+        }}
+    }}
+"#,
+                    c_ty = c_ty,
+                    input = input.name,
+                    ty = &input.ty
+                ));
+            }
         }
 
         for output in &ports.outputs {
-            t!(writeln!(
-                rs_out,
-                r#"    pub fn {output}(&self) -> {ty} {{
+            if output.ty != "u128" {
+                t!(writeln!(
+                    rs_out,
+                    r#"    pub fn {output}(&self) -> {ty} {{
         unsafe {{ ffi::{c_ty}_get_{output}(self.0) }}
     }}
 "#,
-                c_ty = c_ty,
-                output = output.name,
-                ty = &output.ty
-            ));
+                    c_ty = c_ty,
+                    output = output.name,
+                    ty = &output.ty
+                ));
+            } else {
+                t!(writeln!(
+                    rs_out,
+                    r#"    pub fn {output}(&self) -> {ty} {{
+        unsafe {{
+            let a = ffi::{c_ty}_get_{output}_0(self.0).to_le_bytes();
+            let b = ffi::{c_ty}_get_{output}_1(self.0).to_le_bytes();
+            let c = ffi::{c_ty}_get_{output}_2(self.0).to_le_bytes();
+            let d = ffi::{c_ty}_get_{output}_3(self.0).to_le_bytes();
+            u128::from_le_bytes([a[0], a[1], a[2], a[3],
+                b[0], b[1], b[2], b[3],
+                c[0], c[1], c[2], c[3],
+                d[0], d[1], d[2], d[3]])
+        }}
+    }}
+"#,
+                    c_ty = c_ty,
+                    output = output.name,
+                    ty = &output.ty
+                ));
+            }
         }
 
         for inout in &ports.inouts {
-            t!(writeln!(
-                rs_out,
-                r#"    pub fn set_{inout}(&mut self, v: {ty}) {{
+            if inout.ty != "u128" {
+                t!(writeln!(
+                    rs_out,
+                    r#"    pub fn set_{inout}(&mut self, v: {ty}) {{
         unsafe {{ ffi::{c_ty}_set_{inout}(self.0, v); }}
     }}
 
@@ -322,10 +364,41 @@ impl {rs_ty} {{"#,
         unsafe {{ ffi::{c_ty}_get_{inout}(self.0) }}
     }}
 "#,
-                c_ty = c_ty,
-                inout = inout.name,
-                ty = &inout.ty
-            ));
+                    c_ty = c_ty,
+                    inout = inout.name,
+                    ty = &inout.ty
+                ));
+            } else {
+                t!(writeln!(
+                    rs_out,
+                    r#"    pub fn set_{inout}(&mut self, v: {ty}) {{
+        unsafe {{
+            let v = v.to_le_bytes();
+            ffi::{c_ty}_set_{inout}_0(self.0, u32::from_le_bytes([v[0], v[1], v[2], v[3]]));
+            ffi::{c_ty}_set_{inout}_1(self.0, u32::from_le_bytes([v[4], v[5], v[6], v[7]]));
+            ffi::{c_ty}_set_{inout}_2(self.0, u32::from_le_bytes([v[8], v[9], v[10], v[11]]));
+            ffi::{c_ty}_set_{inout}_3(self.0, u32::from_le_bytes([v[12], v[13], v[14], v[15]]));
+        }}
+    }}
+
+    pub fn {inout}(&self) -> {ty} {{
+        unsafe {{
+            let a = ffi::{c_ty}_get_{inout}_0(self.0).to_le_bytes();
+            let b = ffi::{c_ty}_get_{inout}_1(self.0).to_le_bytes();
+            let c = ffi::{c_ty}_get_{inout}_2(self.0).to_le_bytes();
+            let d = ffi::{c_ty}_get_{inout}_3(self.0).to_le_bytes();
+            u128::from_le_bytes([a[0], a[1], a[2], a[3],
+                b[0], b[1], b[2], b[3],
+                c[0], c[1], c[2], c[3],
+                d[0], d[1], d[2], d[3]])
+        }}
+    }}
+"#,
+                    c_ty = c_ty,
+                    inout = inout.name,
+                    ty = &inout.ty
+                ));
+            }
         }
 
         t!(writeln!(
@@ -544,6 +617,7 @@ fn ty2name(ty: &syn::Type) -> String {
                 9..=16 => "u16".to_string(),
                 17..=32 => "u32".to_string(),
                 33..=64 => "u64".to_string(),
+                65..=128 => "u128".to_string(),
                 _ => unreachable!(),
             }
         }
@@ -678,25 +752,64 @@ where
     W: Write,
 {
     for input in inputs {
-        t!(writeln!(
-            rs_out,
-            r#"        pub fn {c_ty}_set_{input}({c_ty}: *mut {c_ty}, v: {ffi_ty});"#,
-            c_ty = c_ty,
-            input = input.name,
-            ffi_ty = rust2ffi(&input.ty)
-        ));
+        if input.ty != "u128" {
+            t!(writeln!(
+                rs_out,
+                r#"        pub fn {c_ty}_set_{input}({c_ty}: *mut {c_ty}, v: {ffi_ty});"#,
+                c_ty = c_ty,
+                input = input.name,
+                ffi_ty = rust2ffi(&input.ty)
+            ));
 
-        t!(writeln!(
-            cpp_out,
-            r#"  void
+            t!(writeln!(
+                cpp_out,
+                r#"  void
   {c_ty}_set_{input}(V{c_ty}* __ptr, {v_ty} __v) {{
     __ptr->{input} = __v;
   }}
 "#,
-            c_ty = c_ty,
-            input = input.name,
-            v_ty = rust2ver(&input.ty)
-        ));
+                c_ty = c_ty,
+                input = input.name,
+                v_ty = rust2ver(&input.ty)
+            ));
+        } else {
+            t!(writeln!(
+                rs_out,
+                r#"        pub fn {c_ty}_set_{input}_0({c_ty}: *mut {c_ty}, v: ::std::os::raw::c_uint);
+        pub fn {c_ty}_set_{input}_1({c_ty}: *mut {c_ty}, v: ::std::os::raw::c_uint);
+        pub fn {c_ty}_set_{input}_2({c_ty}: *mut {c_ty}, v: ::std::os::raw::c_uint);
+        pub fn {c_ty}_set_{input}_3({c_ty}: *mut {c_ty}, v: ::std::os::raw::c_uint);"#,
+                c_ty = c_ty,
+                input = input.name,
+            ));
+
+            t!(writeln!(
+                cpp_out,
+                r#"  void
+  {c_ty}_set_{input}_0(V{c_ty}* __ptr, vluint32_t __v) {{
+    __ptr->{input}[0] = __v;
+  }}
+
+  void
+  {c_ty}_set_{input}_1(V{c_ty}* __ptr, vluint32_t __v) {{
+    __ptr->{input}[1] = __v;
+  }}
+
+  void
+  {c_ty}_set_{input}_2(V{c_ty}* __ptr, vluint32_t __v) {{
+    __ptr->{input}[2] = __v;
+  }}
+
+  void
+  {c_ty}_set_{input}_3(V{c_ty}* __ptr, vluint32_t __v) {{
+    __ptr->{input}[3] = __v;
+  }}
+"#,
+                c_ty = c_ty,
+                input = input.name,
+            ));
+
+        }
     }
 }
 
@@ -705,25 +818,63 @@ where
     W: Write,
 {
     for output in outputs {
-        t!(writeln!(
-            rs_out,
-            r#"        pub fn {c_ty}_get_{output}({c_ty}: *mut {c_ty}) -> {ffi_ty};"#,
-            c_ty = c_ty,
-            output = output.name,
-            ffi_ty = rust2ffi(&output.ty)
-        ));
+        if output.ty != "u128" {
+            t!(writeln!(
+                rs_out,
+                r#"        pub fn {c_ty}_get_{output}({c_ty}: *mut {c_ty}) -> {ffi_ty};"#,
+                c_ty = c_ty,
+                output = output.name,
+                ffi_ty = rust2ffi(&output.ty)
+            ));
 
-        t!(writeln!(
-            cpp_out,
-            r#"  {v_ty}
+            t!(writeln!(
+                cpp_out,
+                r#"  {v_ty}
   {c_ty}_get_{output}(V{c_ty}* __ptr) {{
     return __ptr->{output};
   }}
 "#,
-            c_ty = c_ty,
-            output = output.name,
-            v_ty = rust2ver(&output.ty)
-        ));
+                c_ty = c_ty,
+                output = output.name,
+                v_ty = rust2ver(&output.ty)
+            ));
+        } else {
+            t!(writeln!(
+                rs_out,
+                r#"        pub fn {c_ty}_get_{output}_0({c_ty}: *mut {c_ty}) -> ::std::os::raw::c_uint;
+        pub fn {c_ty}_get_{output}_1({c_ty}: *mut {c_ty}) -> ::std::os::raw::c_uint;
+        pub fn {c_ty}_get_{output}_2({c_ty}: *mut {c_ty}) -> ::std::os::raw::c_uint;
+        pub fn {c_ty}_get_{output}_3({c_ty}: *mut {c_ty}) -> ::std::os::raw::c_uint;"#,
+                c_ty = c_ty,
+                output = output.name,
+            ));
+
+            t!(writeln!(
+                cpp_out,
+                r#"  vluint32_t
+  {c_ty}_get_{output}_0(V{c_ty}* __ptr) {{
+    return __ptr->{output}[0];
+  }}
+
+  vluint32_t
+  {c_ty}_get_{output}_1(V{c_ty}* __ptr) {{
+    return __ptr->{output}[1];
+  }}
+
+  vluint32_t
+  {c_ty}_get_{output}_2(V{c_ty}* __ptr) {{
+    return __ptr->{output}[2];
+  }}
+
+  vluint32_t
+  {c_ty}_get_{output}_3(V{c_ty}* __ptr) {{
+    return __ptr->{output}[3];
+  }}
+"#,
+                c_ty = c_ty,
+                output = output.name,
+            ));
+        }
     }
 }
 
@@ -732,18 +883,19 @@ where
     W: Write,
 {
     for inout in inouts {
-        t!(writeln!(
-            rs_out,
-            r#"        pub fn {c_ty}_set_{inout}({c_ty}: *mut {c_ty}, v: {ffi_ty});
+        if inout.ty != "u128" {
+            t!(writeln!(
+                rs_out,
+                r#"        pub fn {c_ty}_set_{inout}({c_ty}: *mut {c_ty}, v: {ffi_ty});
         pub fn {c_ty}_get_{inout}({c_ty}: *mut {c_ty}) -> {ffi_ty};"#,
-            c_ty = c_ty,
-            inout = inout.name,
-            ffi_ty = rust2ffi(&inout.ty)
-        ));
+                c_ty = c_ty,
+                inout = inout.name,
+                ffi_ty = rust2ffi(&inout.ty)
+            ));
 
-        t!(writeln!(
-            cpp_out,
-            r#"  void
+            t!(writeln!(
+                cpp_out,
+                r#"  void
   {c_ty}_set_{inout}(V{c_ty}* __ptr, {v_ty} __v) {{
     __ptr->{inout} = __v;
   }}
@@ -753,9 +905,70 @@ where
     return __ptr->{inout};
   }}
 "#,
-            c_ty = c_ty,
-            inout = inout.name,
-            v_ty = rust2ver(&inout.ty)
-        ));
+                c_ty = c_ty,
+                inout = inout.name,
+                v_ty = rust2ver(&inout.ty)
+            ));
+        } else {
+            t!(writeln!(
+                rs_out,
+                r#"        pub fn {c_ty}_set_{inout}_0({c_ty}: *mut {c_ty}, v: ::std::os::raw::c_uint);
+        pub fn {c_ty}_get_{inout}_0({c_ty}: *mut {c_ty}) -> ::std::os::raw::c_uint;
+        pub fn {c_ty}_set_{inout}_1({c_ty}: *mut {c_ty}, v: ::std::os::raw::c_uint);
+        pub fn {c_ty}_get_{inout}_1({c_ty}: *mut {c_ty}) -> ::std::os::raw::c_uint;
+        pub fn {c_ty}_set_{inout}_2({c_ty}: *mut {c_ty}, v: ::std::os::raw::c_uint);
+        pub fn {c_ty}_get_{inout}_2({c_ty}: *mut {c_ty}) -> ::std::os::raw::c_uint;
+        pub fn {c_ty}_set_{inout}_3({c_ty}: *mut {c_ty}, v: ::std::os::raw::c_uint);
+        pub fn {c_ty}_get_{inout}_3({c_ty}: *mut {c_ty}) -> ::std::os::raw::c_uint;"#,
+                c_ty = c_ty,
+                inout = inout.name,
+            ));
+
+            t!(writeln!(
+                cpp_out,
+                r#"  void
+  {c_ty}_set_{inout}_0(V{c_ty}* __ptr, vluint32_t __v) {{
+    __ptr->{inout}[0] = __v;
+  }}
+
+  vluint32_t
+  {c_ty}_get_{inout}_0(V{c_ty}* __ptr) {{
+    return __ptr->{inout}[0];
+  }}
+
+  void
+  {c_ty}_set_{inout}_1(V{c_ty}* __ptr, vluint32_t __v) {{
+    __ptr->{inout}[1] = __v;
+  }}
+
+  vluint32_t
+  {c_ty}_get_{inout}_1(V{c_ty}* __ptr) {{
+    return __ptr->{inout}[1];
+  }}
+
+  void
+  {c_ty}_set_{inout}_2(V{c_ty}* __ptr, vluint32_t __v) {{
+    __ptr->{inout}[2] = __v;
+  }}
+
+  vluint32_t
+  {c_ty}_get_{inout}_2(V{c_ty}* __ptr) {{
+    return __ptr->{inout}[2];
+  }}
+
+  void
+  {c_ty}_set_{inout}_3(V{c_ty}* __ptr, vluint32_t __v) {{
+    __ptr->{inout}[3] = __v;
+  }}
+
+  vluint32_t
+  {c_ty}_get_{inout}_3(V{c_ty}* __ptr) {{
+    return __ptr->{inout}[3];
+  }}
+"#,
+                c_ty = c_ty,
+                inout = inout.name,
+            ));
+        }
     }
 }
