@@ -6,10 +6,8 @@ use std::io::BufWriter;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
-use syn::punctuated::Punctuated;
-use syn::token::Comma;
 use syn::visit::{self, Visit};
-use syn::{self, AttrStyle, Attribute, Fields, Generics, ItemStruct, Meta, NestedMeta, Visibility};
+use syn::{self, AttrStyle, Attribute, Fields, Generics, ItemStruct, Visibility};
 
 macro_rules! t {
     ($e:expr) => {
@@ -113,11 +111,7 @@ impl Default for ModuleGenerator {
 }
 
 fn check_name(attr: &Attribute, name: &str) -> bool {
-    if let Some(meta) = attr.interpret_meta() {
-        meta.name() == name
-    } else {
-        false
-    }
+    attr.meta.path().is_ident(name)
 }
 
 fn is_public(vis: &Visibility) -> bool {
@@ -134,7 +128,7 @@ struct StructFinder {
 impl<'ast> Visit<'ast> for StructFinder {
     fn visit_item_struct(&mut self, i: &'ast ItemStruct) {
         let any_module = i.attrs.iter().any(|attr| {
-            attr.style == AttrStyle::Outer && !attr.is_sugared_doc && check_name(attr, "module")
+            attr.style == AttrStyle::Outer && check_name(attr, "module")
         });
         if any_module {
             self.structs.insert(i.ident.to_string());
@@ -142,11 +136,13 @@ impl<'ast> Visit<'ast> for StructFinder {
     }
 }
 
+#[derive(Debug)]
 struct Port {
     name: String,
     ty: String,
 }
 
+#[derive(Debug)]
 struct Ports {
     clock: Option<Port>,
     reset: Option<Port>,
@@ -521,15 +517,9 @@ impl<'ast, 'b> Visit<'ast> for Generator<'b> {
 
 fn find_module_attrs(attr: &Attribute) -> Vec<String> {
     let mut acc = Vec::new();
-    if let Some(meta) = attr.interpret_meta() {
-        match meta {
-            Meta::List(ref list) if meta.name() == "module" => for item in &list.nested {
-                if let NestedMeta::Meta(Meta::Word(ref ident)) = item {
-                    acc.push(ident.to_string())
-                }
-            },
-            _ => {}
-        }
+    if !check_name(attr, "module") { return acc; }
+    if let Ok(list) = attr.meta.require_list() {
+        acc.push(list.tokens.to_string());
     }
     acc
 }
@@ -543,49 +533,24 @@ enum PortAttr {
     InOut,
 }
 
-type NestedMetaList = Punctuated<NestedMeta, Comma>;
-fn list_contains_name(list: &NestedMetaList, name: &str) -> bool {
-    list.iter().any(|meta| match meta {
-        NestedMeta::Meta(Meta::Word(ref ident)) if ident == name => true,
-        _ => false,
-    })
-}
-
 fn find_port_attr(attrs: &[Attribute]) -> PortAttr {
     attrs.iter().fold(PortAttr::None, |pa, attr| {
-        let meta = match attr.interpret_meta() {
-            Some(meta) => meta,
-            None => return pa,
-        };
-        match meta {
-            syn::Meta::List(ref items) => {
-                if items.ident != "port" {
-                    return pa;
-                }
-
-                if items.nested.len() != 1 {
-                    panic!("expected one argument");
-                // PortAttr::None
-                } else if list_contains_name(&items.nested, "clock") {
-                    PortAttr::Clock
-                } else if list_contains_name(&items.nested, "reset") {
-                    PortAttr::Reset
-                } else if list_contains_name(&items.nested, "input") {
-                    PortAttr::Input
-                } else if list_contains_name(&items.nested, "output") {
-                    PortAttr::Output
-                } else if list_contains_name(&items.nested, "inout") {
-                    PortAttr::InOut
-                } else {
-                    panic!("invalid argument");
-                    // PortAttr::None
-                }
+        let meta = &attr.meta;
+        if !meta.path().is_ident("port") {
+            return pa;
+        }
+        if let Ok(list) = meta.require_list() {
+            let token = list.tokens.to_string();
+            match token.as_str() {
+                "clock" => PortAttr::Clock,
+                "reset" => PortAttr::Reset,
+                "input" => PortAttr::Input,
+                "output" => PortAttr::Output,
+                "inout" => PortAttr::InOut,
+                _ => panic!("invalid argument"),
             }
-            syn::Meta::Word(..) => {
-                panic!("expected one argument");
-                // PortAttr::None
-            }
-            _ => pa,
+        } else {
+            return pa;
         }
     })
 }
@@ -593,7 +558,7 @@ fn find_port_attr(attrs: &[Attribute]) -> PortAttr {
 fn expr2width(e: &syn::Expr) -> usize {
     match e {
         syn::Expr::Lit(ref l) => match l.lit {
-            syn::Lit::Int(ref a) => a.value() as usize,
+            syn::Lit::Int(ref a) => a.base10_parse::<usize>().unwrap(),
             _ => panic!("unknown literal: {:?}", l),
         },
         _ => panic!("unknown expr: {:?}", e),
@@ -604,7 +569,7 @@ fn ty2name(ty: &syn::Type) -> String {
     match ty {
         syn::Type::Path(syn::TypePath { ref path, .. }) => {
             let last = path.segments.last().unwrap();
-            if last.into_value().ident == "bool" {
+            if last.ident == "bool" {
                 "u8".to_string()
             } else {
                 panic!("only support bool");
@@ -656,7 +621,7 @@ fn extract_ports(fields: &Fields) -> Ports {
 
     match fields {
         Fields::Named(ref fields) => fields.named.iter().fold(ports, |mut ports, field| {
-            let port = match field.ident {
+            let port = match &field.ident {
                 Some(name) => {
                     let name = name.to_string();
                     let ty = ty2name(&field.ty);
