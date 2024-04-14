@@ -23,6 +23,7 @@ pub struct Verilator {
     trace: bool,
     optimized: bool, 
     suppress_warnings: Vec<String>,
+    extra_options: Vec<String>,
 }
 
 impl Verilator {
@@ -121,6 +122,11 @@ impl Verilator {
         self
     }
 
+    pub fn extra_option(&mut self, option: &str) -> &mut Verilator {
+        self.extra_options.push(option.to_string());
+        self
+    }
+
     pub fn build(&mut self, top_module: &str) -> PathBuf {
         let dst = self
             .out_dir
@@ -170,6 +176,10 @@ impl Verilator {
 
         for warn in &self.suppress_warnings {
             cmd.arg(format!("-Wno-{}", warn));
+        }
+
+        for option in &self.extra_options {
+            cmd.arg(option);
         }
 
         for dir in &self.module_directories {
@@ -243,6 +253,7 @@ impl Default for Verilator {
             trace: false,
             optimized: false,
             suppress_warnings: Vec::new(),
+            extra_options: Vec::new(),
         }
     }
 }

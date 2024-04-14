@@ -7,7 +7,7 @@ use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
 use syn::visit::{self, Visit};
-use syn::{self, AttrStyle, Attribute, Fields, Generics, ItemStruct, Visibility};
+use syn::{AttrStyle, Attribute, Fields, Generics, ItemStruct, Visibility};
 
 macro_rules! t {
     ($e:expr) => {
