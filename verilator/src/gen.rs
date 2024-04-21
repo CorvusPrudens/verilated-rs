@@ -210,9 +210,11 @@ impl Verilator {
 
         run(&mut cmd, "verilator");
 
+        let nproc = num_cpus::get();
         Command::new("make")
             .current_dir(dst.clone())
-            .args(["-f", &format!("V{}.mk", top_module)])
+            .args(["-f", &format!("V{top_module}.mk")])
+            .args(["-j", &format!("{nproc}")])
             .spawn()
             .unwrap()
             .wait()
