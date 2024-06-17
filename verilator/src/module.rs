@@ -2,8 +2,8 @@ use fnv::FnvHashSet;
 
 use std::env;
 use std::fs::File;
-use std::io::BufWriter;
 use std::io::prelude::*;
+use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
 use syn::visit::{self, Visit};
@@ -80,7 +80,8 @@ impl ModuleGenerator {
         println!("{} items", ast.items.len());
 
         // Prep the code generator
-        let out_dir = self.out_dir
+        let out_dir = self
+            .out_dir
             .clone()
             .unwrap_or_else(|| PathBuf::from(env::var_os("OUT_DIR").unwrap()));
 
@@ -127,9 +128,10 @@ struct StructFinder {
 
 impl<'ast> Visit<'ast> for StructFinder {
     fn visit_item_struct(&mut self, i: &'ast ItemStruct) {
-        let any_module = i.attrs.iter().any(|attr| {
-            attr.style == AttrStyle::Outer && check_name(attr, "module")
-        });
+        let any_module = i
+            .attrs
+            .iter()
+            .any(|attr| attr.style == AttrStyle::Outer && check_name(attr, "module"));
         if any_module {
             self.structs.insert(i.ident.to_string());
         }
@@ -192,6 +194,7 @@ mod ffi {{
         t!(writeln!(
             cpp_out,
             r#"#include <V{c_ty}.h>
+#include "verilated_vcd_c.h"
 
 extern "C" {{
   // CONSTRUCTORS
@@ -517,7 +520,9 @@ impl<'ast, 'b> Visit<'ast> for Generator<'b> {
 
 fn find_module_attrs(attr: &Attribute) -> Vec<String> {
     let mut acc = Vec::new();
-    if !check_name(attr, "module") { return acc; }
+    if !check_name(attr, "module") {
+        return acc;
+    }
     if let Ok(list) = attr.meta.require_list() {
         acc.push(list.tokens.to_string());
     }
@@ -773,7 +778,6 @@ where
                 c_ty = c_ty,
                 input = input.name,
             ));
-
         }
     }
 }
