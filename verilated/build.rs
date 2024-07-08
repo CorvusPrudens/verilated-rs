@@ -48,7 +48,8 @@ fn main() {
         let tool = cfg.get_compiler();
         cfg.cpp(true).target(&target);
         if tool.is_like_clang() {
-            cfg.flag("-faligned-new")
+            cfg.flag("-std=c++17")
+                .flag("-faligned-new")
                 .flag("-fbracket-depth=4096")
                 .flag("-Qunused-arguments")
                 .flag("-Wno-parentheses-equality")
