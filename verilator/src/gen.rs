@@ -21,7 +21,7 @@ pub struct Verilator {
     module_directories: Vec<PathBuf>,
     coverage: bool,
     trace: bool,
-    optimized: bool, 
+    optimized: bool,
     suppress_warnings: Vec<String>,
     extra_options: Vec<String>,
 }
@@ -219,8 +219,16 @@ impl Verilator {
             .unwrap()
             .wait()
             .unwrap();
+
+        Command::new("rm")
+            .current_dir(dst.clone())
+            .arg(format!("lib{lib_name}.so"))
+            .output()
+            .unwrap();
+
         println!("cargo:rustc-link-search={}", dst.to_str().unwrap());
-        println!("cargo:rustc-link-lib={lib_name}");
+        println!("cargo:rustc-link-lib=static={lib_name}");
+
         dst
     }
 
